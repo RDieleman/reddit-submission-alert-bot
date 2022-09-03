@@ -102,8 +102,10 @@ def main():
     for submission in reddit.subreddit(subreddit_filter).stream.submissions():
         # Filter submission.
         if (
-                (len(submission_white_list) > 0 and not submission_contains_filters(submission, submission_white_list,
-                                                                                    False))
+                submission.author is None  # author has deleted their account.
+                or (
+                len(submission_white_list) > 0 and not submission_contains_filters(submission, submission_white_list,
+                                                                                   False))
                 or (len(submission_black_list) > 0 and submission_contains_filters(submission, submission_black_list,
                                                                                    False))
                 or (len(submission_must_contain_list) > 0 and not submission_contains_filters(submission,
