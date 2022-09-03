@@ -57,6 +57,9 @@ def submission_contains_filters(submission, filters, contains_all) -> bool:
         if contains_all:
             return False
 
+    if contains_all:
+        return True
+
     return False
 
 
