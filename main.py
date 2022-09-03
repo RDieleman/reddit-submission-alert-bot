@@ -39,14 +39,23 @@ def get_list_from_config(key) -> [str]:
     return items
 
 
-def submission_contains_filters(submission, filters) -> bool:
+def submission_contains_filters(submission, filters, contains_all) -> bool:
     # Check if the title or selftext contains filtered substrings.
     for f in filters:
         if f.lower() in submission.title.lower():
-            return True
+            if not contains_all:
+                return True
+
+            continue
 
         if f.lower() in submission.selftext.lower():
-            return True
+            if not contains_all:
+                return True
+
+            continue
+
+        if contains_all:
+            return False
 
     return False
 
@@ -83,14 +92,20 @@ def main():
     # Create filters for individual submissions.
     submission_black_list = get_list_from_config('SUBMISSION_BLACK_LIST')
     submission_white_list = get_list_from_config('SUBMISSION_WHITE_LIST')
+    submission_must_contain_list = get_list_from_config('SUBMISSION_MUST_CONTAIN_LIST')
     user_block_list = get_list_from_config('USER_BLOCK_LIST')
 
     logger.info('Started listening for new submissions...')
     for submission in reddit.subreddit(subreddit_filter).stream.submissions():
         # Filter submission.
         if (
-                (len(submission_white_list) > 0 and not submission_contains_filters(submission, submission_white_list))
-                or (len(submission_black_list) > 0 and submission_contains_filters(submission, submission_black_list))
+                (len(submission_white_list) > 0 and not submission_contains_filters(submission, submission_white_list,
+                                                                                    False))
+                or (len(submission_black_list) > 0 and submission_contains_filters(submission, submission_black_list,
+                                                                                   False))
+                or (len(submission_must_contain_list) > 0 and submission_contains_filters(submission,
+                                                                                          submission_must_contain_list,
+                                                                                          True))
                 or submission.author.name in user_block_list
         ):
             continue
