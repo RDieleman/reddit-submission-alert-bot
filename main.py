@@ -39,10 +39,13 @@ def get_list_from_config(key) -> [str]:
     return items
 
 
-def title_contains_filters(title_lower, filters) -> bool:
-    # Check if the title contains filtered substrings.
+def submission_contains_filters(submission, filters) -> bool:
+    # Check if the title or selftext contains filtered substrings.
     for f in filters:
-        if f.lower() in title_lower:
+        if f.lower() in submission.title.lower():
+            return True
+
+        if f.lower() in submission.selftext.lower():
             return True
 
     return False
@@ -78,18 +81,16 @@ def main():
         subreddit_filter = subreddit_filter + "-" + subreddit_black_list
 
     # Create filters for individual submissions.
-    title_black_list = get_list_from_config('TITLE_BLACK_LIST')
-    title_white_list = get_list_from_config('TITLE_WHITE_LIST')
+    submission_black_list = get_list_from_config('SUBMISSION_BLACK_LIST')
+    submission_white_list = get_list_from_config('SUBMISSION_WHITE_LIST')
     user_block_list = get_list_from_config('USER_BLOCK_LIST')
 
     logger.info('Started listening for new submissions...')
     for submission in reddit.subreddit(subreddit_filter).stream.submissions():
-        title_lower = submission.title.lower()
-
         # Filter submission.
         if (
-                (len(title_white_list) > 0 and not title_contains_filters(title_lower, title_white_list))
-                or (len(title_black_list) > 0 and title_contains_filters(title_lower, title_black_list))
+                (len(submission_white_list) > 0 and not submission_contains_filters(submission, submission_white_list))
+                or (len(submission_black_list) > 0 and submission_contains_filters(submission, submission_black_list))
                 or submission.author.name in user_block_list
         ):
             continue
