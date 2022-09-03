@@ -103,9 +103,9 @@ def main():
                                                                                     False))
                 or (len(submission_black_list) > 0 and submission_contains_filters(submission, submission_black_list,
                                                                                    False))
-                or (len(submission_must_contain_list) > 0 and submission_contains_filters(submission,
-                                                                                          submission_must_contain_list,
-                                                                                          True))
+                or (len(submission_must_contain_list) > 0 and not submission_contains_filters(submission,
+                                                                                              submission_must_contain_list,
+                                                                                              True))
                 or submission.author.name in user_block_list
         ):
             continue
