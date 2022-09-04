@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 
 import praw
 from dotenv import load_dotenv
@@ -63,14 +64,15 @@ def submission_contains_filters(submission, filters, contains_all) -> bool:
     return False
 
 
-def notify_user(submission):
-    subject = 'New submission found!'
-    message = '{title}\n\nr/{subreddit}\n\n{url}'.format(
+def format_message(submission):
+    return '[{title}]({url})\n\nr/{subreddit}'.format(
         subreddit=submission.subreddit,
         title=submission.title,
         url=submission.permalink
     )
 
+
+def notify_users(subject, message):
     logger.info(message)
 
     logger.info('Notifying users...')
@@ -99,7 +101,14 @@ def main():
     user_block_list = get_list_from_config('USER_BLOCK_LIST')
 
     logger.info('Started listening for new submissions...')
+    last_status_notify = datetime.utcnow()
     for submission in reddit.subreddit(subreddit_filter).stream.submissions():
+        # Notify user about service health.
+        now = datetime.utcnow()
+        if 23 < now.hour < 24 and last_status_notify.timestamp() > now.timestamp() + (60 * 60 * 23):
+            notify_users('Service online.', '')
+            last_status_notify = datetime.utcnow()
+
         # Filter submission.
         if (
                 submission.author is None  # author has deleted their account.
@@ -116,7 +125,7 @@ def main():
             continue
 
         try:
-            notify_user(submission)
+            notify_users('Submission found!', format_message(submission))
         except Exception as ex:
             logging.error(ex)
 
