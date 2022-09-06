@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import datetime
 
 import praw
 
@@ -126,14 +125,7 @@ def should_filter_submission(submission):
 
 def main():
     logger.info('Started listening for new submissions...')
-    last_status_notify = datetime.utcnow()
     for submission in get_subreddits().stream.submissions():
-        # Notify user about service health.
-        now = datetime.utcnow()
-        if last_status_notify.timestamp() + (60 * 60 * 23) < now.timestamp():
-            notify_users('Service online.', '')
-            last_status_notify = datetime.utcnow()
-
         if should_filter_submission(submission):
             logger.debug('Blocked: https://reddit.com' + submission.permalink)
             continue
