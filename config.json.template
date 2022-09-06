@@ -1,0 +1,29 @@
+{
+  "client": {
+    "appName": "",
+    "id": "",
+    "secret": "",
+    "username": "",
+    "password": ""
+  },
+  "notifiedUsers": [],
+  "blockedAuthors": [],
+  "subreddits": {
+    "whitelist": [],
+    "blacklist": []
+  },
+  "submissions": {
+    "filters": [
+      {
+        "scopes": [
+          "flair", "title", "content"
+        ],
+        "caseSensitive": false,
+        "whitelist": [],
+        "blacklist": [],
+        "overwrite": []
+      }
+    ],
+    "allowNsfw": false
+  }
+}

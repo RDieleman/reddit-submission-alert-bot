@@ -1,9 +1,8 @@
+import json
 import logging
-import os
 from datetime import datetime
 
 import praw
-from dotenv import load_dotenv
 
 # Create and configure logger.
 LOG_FORMAT = "%(levelname)s %(asctime)s - %(message)s"
@@ -14,54 +13,22 @@ logging.basicConfig(
     filemode='w')
 logger = logging.getLogger()
 
-# Load environment variables from file.
-load_dotenv()
+# Load configuration.
+with open("config.json", "r") as file:
+    config = json.load(file)
 
 # Create Reddit instance.
-reddit = praw.Reddit(client_id=os.getenv('CLIENT_ID'),
-                     client_secret=os.getenv('CLIENT_SECRET'),
+client = config.get('client')
+reddit = praw.Reddit(client_id=client.get('id'),
+                     client_secret=client.get('secret'),
                      user_agent='script:{appname} (by u/{username})'.format(
-                         appname=os.getenv('APP_NAME'),
-                         username=os.getenv('DEVELOPER_USERNAME')
+                         appname=client.get('appName'),
+                         username=client.get('username')
                      ),
-                     username=os.getenv('DEVELOPER_USERNAME'),
-                     password=os.getenv('DEVELOPER_PASSWORD'))
+                     username=client.get('username'),
+                     password=client.get('password'))
 
 logger.info('Reddit instance started.')
-
-
-def get_list_from_config(key) -> [str]:
-    # Lists are comma separated.
-    items = os.getenv(key, '').split(',')
-
-    while '' in items:
-        items.remove('')
-
-    return items
-
-
-def submission_contains_filters(submission, filters, contains_all) -> bool:
-    # Check if the title or selftext contains filtered substrings.
-    for f in filters:
-        if f.lower() in submission.title.lower():
-            if not contains_all:
-                return True
-
-            continue
-
-        if f.lower() in submission.selftext.lower():
-            if not contains_all:
-                return True
-
-            continue
-
-        if contains_all:
-            return False
-
-    if contains_all:
-        return True
-
-    return False
 
 
 def format_message(submission):
@@ -76,15 +43,17 @@ def notify_users(subject, message):
     logger.info(message)
 
     logger.info('Notifying users...')
-    for name in get_list_from_config('NOTIFY_USERS_LIST'):
+    for name in config.get('notifiedUsers'):
         reddit.redditor(name).message(subject=subject, message=message)
 
 
-def main():
+def get_subreddits():
+    subreddit_config = config.get('subreddits')
+
     # Create a list of subreddits that will be listened to.
     subreddit_filter = 'all'
-    subreddit_white_list = "+".join(get_list_from_config('SUBREDDIT_WHITE_LIST'))
-    subreddit_black_list = "-".join(get_list_from_config('SUBREDDIT_WHITE_LIST'))
+    subreddit_white_list = "+".join(subreddit_config.get('whitelist'))
+    subreddit_black_list = "-".join(subreddit_config.get('blacklist'))
 
     # If a whitelist exists, overwrite the default 'all' value.
     if len(subreddit_white_list) > 0:
@@ -94,38 +63,84 @@ def main():
     if len(subreddit_black_list) < 0:
         subreddit_filter = subreddit_filter + "-" + subreddit_black_list
 
-    # Create filters for individual submissions.
-    submission_black_list = get_list_from_config('SUBMISSION_BLACK_LIST')
-    submission_white_list = get_list_from_config('SUBMISSION_WHITE_LIST')
-    submission_must_contain_list = get_list_from_config('SUBMISSION_MUST_CONTAIN_LIST')
-    user_block_list = get_list_from_config('USER_BLOCK_LIST')
+    return reddit.subreddit(subreddit_filter)
 
+
+def list_item_in_value(l, value, case_sensitive):
+    formatted_value = value if case_sensitive else value.lower()
+
+    for item in l:
+        formatted_item = item if case_sensitive else item.lower()
+        if formatted_item in formatted_value:
+            return True
+
+    return False
+
+
+def should_filter_value(f, value):
+    case_sensitive = f.get('caseSensitive')
+
+    overwrite = f.get('overwrite')
+    in_overwrite = False if not overwrite else list_item_in_value(overwrite, value, case_sensitive)
+
+    if in_overwrite:
+        return False
+
+    whitelist = f.get('whitelist')
+    blacklist = f.get('blacklist')
+
+    in_whitelist = True if not whitelist else list_item_in_value(whitelist, value, case_sensitive)
+    in_blacklist = False if not blacklist else list_item_in_value(blacklist, value, case_sensitive)
+
+    return not in_whitelist or in_blacklist
+
+
+def should_filter_submission(submission):
+    submission_config = config.get('submissions')
+    filters = submission_config.get('filters')
+
+    if not submission.author or submission.author.name in config.get('blockedAuthors'):
+        return True
+
+    if not submission_config.get('allowNsfw') and submission.over_18:
+        return True
+
+    for f in filters:
+        for scope in f.get('scopes'):
+            value = ''
+            if scope == 'flair':
+                value = submission.link_flair_text
+                if not value:
+                    continue
+
+            elif scope == 'title':
+                value = submission.title
+            elif scope == 'content':
+                value = submission.selftext
+
+            if should_filter_value(f, value):
+                return True
+
+    return False
+
+
+def main():
     logger.info('Started listening for new submissions...')
     last_status_notify = datetime.utcnow()
-    for submission in reddit.subreddit(subreddit_filter).stream.submissions():
+    for submission in get_subreddits().stream.submissions():
         # Notify user about service health.
         now = datetime.utcnow()
-        if 23 < now.hour < 24 and last_status_notify.timestamp() > now.timestamp() + (60 * 60 * 23):
+        if last_status_notify.timestamp() + (60 * 60 * 23) < now.timestamp():
             notify_users('Service online.', '')
             last_status_notify = datetime.utcnow()
 
-        # Filter submission.
-        if (
-                submission.author is None  # author has deleted their account.
-                or (
-                len(submission_white_list) > 0 and not submission_contains_filters(submission, submission_white_list,
-                                                                                   False))
-                or (len(submission_black_list) > 0 and submission_contains_filters(submission, submission_black_list,
-                                                                                   False))
-                or (len(submission_must_contain_list) > 0 and not submission_contains_filters(submission,
-                                                                                              submission_must_contain_list,
-                                                                                              True))
-                or submission.author.name in user_block_list
-        ):
+        if should_filter_submission(submission):
+            logger.debug('Blocked: https://reddit.com' + submission.permalink)
             continue
 
         try:
-            notify_users('Submission found!', format_message(submission))
+            logger.debug('Notified: https://reddit.com' + submission.permalink)
+            notify_users('New Post', format_message(submission))
         except Exception as ex:
             logging.error(ex)
 
